@@ -17,3 +17,4 @@ frontend/.astro/
 dashboard/node_modules/
 dashboard/dist/
 dashboard/.astro/
+measure-results.txt

@@ -1,110 +1,150 @@
-# Interview notes: likely questions and short answers
+# Interview prep: likely questions, short answers, and where to point
 
-**1. Why a single FastAPI process with SQLite instead of something "scalable"?**
-The tool runs on the machine it monitors, so every MB and CPU cycle it uses is
-taken from the containers. One async worker handles dozens of SSE and WebSocket
-clients easily. SQLite in WAL mode is enough for a handful of users and an
-audit log, and needs no extra daemon. I measured 0.28% of one core and
-about 42 MiB (cgroup) idle, and 0.45% with 10 live viewers. The trade-off is
-that rate limits, terminal counters and the metrics cache live in memory and
-reset on restart. I documented that.
+Use this to rehearse. Every answer names the file to open while explaining.
 
-**2. How do you guarantee "one LXD call per interval" no matter how many viewers?**
-A single `MetricsHub` task polls `GET /1.0/instances?recursion=2`, which embeds
-the state of *every* instance in one response. Subscribers get the same
-snapshot through 1-slot queues, and the newest snapshot replaces an unread one.
-The task is created when the first SSE client subscribes and cancelled when the
-last one leaves. I verified this with `lxc monitor`: 3 clients for 13 s produced
-4 calls, and 0 calls after they disconnected. A unit test shows 50 subscribers
-cause about 3 calls over 3 ticks, not 150.
+**1. Walk me through a request to `/api/containers/test1/history` from a container user.**
+1. `AuthMiddleware.process_resource` (`backend/hsm/web/policy.py`) looks up
+   the resource's declared policy, `CONTAINER`.
+2. `resolve_user` checks the cookie's HMAC, then the session row (absolute and
+   idle expiry), then the user row.
+3. It validates that `test1` matches the name regex, then calls
+   `db.can_access`. That query joins `containers` (name → uuid) with
+   `assignments` or owner. If there's no row, the answer is 403, whether or
+   not the container exists.
+4. Only then does `History.on_get` (`hsm/web/containers.py`) run. It picks a
+   TSDB tier, reads only the overlapping segment files, and buckets to ≤ 360
+   points.
 
-**3. Why the `BOOTSTRAP_ADMIN_EMAIL` env var rather than "first login is admin"?**
-"First login wins" is a race: anyone who reaches the URL before the owner gets
-root-equivalent control. The env var makes the root of trust the server's own
-config, which only the owner can edit. It's deterministic, works the same on
-restart, and recovering from a lost admin is just editing one line. That
-account is re-asserted as admin on each login and can't be demoted in the UI.
-Everyone else starts with no assignments.
+**2. Why a separate collector process instead of a thread in the API?**
+- The brief requires collection independent of the UI. As its own unit
+  (`deploy/hsm-collector.service`) it keeps recording while the web API is
+  restarted, upgraded or crashed.
+- It's the **sole writer** of TinyFlux, so there are no multi-writer races.
+- Its sandbox can be much tighter: no network at all, lower CPU and IO
+  priority.
+- Cost: one extra small Python process (see the REPORT measurements).
+- Rejected: a thread in the API (couples history to the web process
+  lifetime), and an RPC socket between the processes (more protocol surface;
+  an atomically replaced file is enough).
 
-**4. How is authorization enforced? What stops a missed check?**
-Every route declares `require_user`, `require_admin` or
-`require_container_access(name)` as a FastAPI dependency. Role and assignments
-are read from the DB on every request, and nothing comes from the client. Tests
-introspect `app.routes`: every non-public route must return 401 without a
-session, and every route depending on `require_admin` must return 403 for a
-normal user. A new route that forgets its dependency fails CI. Unassigned and
-non-existent containers return the same 403, so a user can't probe names.
+**3. How does N open tabs not cost N× the work?**
+- Tabs never reach the collector, which makes one LXD call per 10 s regardless.
+- In the web process, `LiveHub` (`hsm/web/live.py`) has one watcher task that
+  `stat`s `latest.json` once a second. It exists only while there's at least
+  one subscriber.
+- Each snapshot is read once and queued to every tab, filtered per user.
+- Tests: `test_many_tabs_one_reader_and_nothing_when_idle` and
+  `test_one_lxd_call_per_tick`.
 
-**5. Why server-side sessions if the cookie is already signed?**
-A purely signed cookie can't be revoked. Logout or deleting a user wouldn't
-take effect until expiry. My cookie holds an HMAC-signed random token, and the
-DB stores only its SHA-256 with `expires_at`. That gives immediate revocation,
-and a leaked DB file contains no usable sessions. Long-lived streams re-check
-the session every tick, so an SSE stream or open terminal closes within seconds
-of logout, expiry, demotion or unassignment.
+**4. Why TinyFlux segments and tiers? Isn't that over-engineering?**
+I measured first:
+- One file with a day of raw data for 5 containers took 0.34 s and 60 MB RSS
+  per query, because TinyFlux parses the whole file. Hence hourly and daily
+  segments.
+- TinyFlux writes field names on every row (~228 B/row), so 30 days of 5-minute
+  rows came to 45 MB per 10 containers. Hence tiers (raw 6 h, 5-minute 7 d,
+  1-hour 30 d), giving about 13.6 MB.
+- Retention deletes whole files: no rewrite, no reader and writer race.
+- Code: `hsm/tsdb.py`. Test: `test_storage_is_bounded`.
 
-**6. How does CSRF protection work, including for WebSockets?**
-Every non-GET request needs an `X-CSRF-Token` matching the per-session
-synchronizer token from `/api/me`, plus an `Origin` equal to `PUBLIC_ORIGIN`
-when the browser sends one. This is enforced inside `require_user`, so no
-mutating route can forget it. `SameSite=Lax` is a second layer. WebSockets
-can't carry custom headers, so the terminal handshake is rejected unless
-`Origin` matches exactly. That is the standard defence against cross-site
-WebSocket hijacking. Login CSRF is covered by the OAuth `state` and nonce.
+**5. What does a quota measure, and why not actual usage?**
+- It measures the sum of *allocated* limits (CPU cores, memory, disk) over the
+  containers a user owns. Allocation is what the host promised and is stable;
+  usage spikes would make a quota flap, and enforcing it would mean killing
+  work.
+- At the limit, new allocations are refused with the numbers, and running
+  containers are untouched.
+- Races are prevented by an `asyncio.Lock` plus counting in-flight create jobs
+  (`_allocated_with_pending`).
+- Code: `hsm/quota.py`, `hsm/web/containers.py`.
 
-**7. Walk me through the terminal path and its safeguards.**
-xterm.js sends binary frames to `/api/containers/{name}/terminal`. On connect
-the server:
-1. checks Origin, the session, assignment and that the container is running;
-2. applies the rate limit (10/min/user, 20/min/IP) and concurrency caps (2 per
-   user, 8 total);
-3. calls LXD `exec` with a fixed argv (`/bin/bash -l`), `interactive` and
-   `wait-for-websocket`, and bridges to LXD's data and control websockets over
-   the unix socket.
+**6. How do you stop next month's endpoint from forgetting authorization?**
+There are three layers:
+- **Runtime:** a resource with no `policy` gets a 500, not a pass.
+- **Startup:** `check_routes()` refuses to start the app.
+- **Tests:** they walk `app.route_table` and assert 401 without a session for
+  every protected responder, and 403 for a user on every admin responder.
 
-Text frames are accepted only as `{"type":"resize"}`. A watchdog closes the
-session on idle timeout (15 min), session expiry or revocation, with distinct
-close codes the UI explains. On close we SIGHUP the shell, and I verified no
-bash process is left behind. Open and close are audited with duration.
+CSRF lives in the same middleware, so a new POST is protected automatically.
 
-**8. How do you handle input validation and injection risks?**
-Pydantic models use `extra="forbid"`.
-* Container names match `^[a-z0-9-]{1,63}$` in paths and bodies, plus LXD's
-  hostname rule on create.
-* Images must be in a server-side allowlist.
-* CPU and memory are bounded by the schema and host limits.
-* There's no shell anywhere: LXD REST with JSON bodies and argv lists, and URL
-  segments are additionally `quote()`d.
-* All SQL is parameterized.
+**7. What happens on logout? On revoking a user?**
+- **Logout** deletes the server-side session row, so the cookie is dead
+  everywhere at once.
+- **Revoking a user** deletes the user; sessions and grants cascade, and their
+  containers become unowned but keep running.
+- Open SSE streams re-check on every push, and terminals every 5 s, so both
+  close within seconds.
+- Why not JWT: it can't be revoked before expiry.
 
-In the UI, all server data goes through `textContent`, never `innerHTML`. The
-CSP is `script-src 'self'`, and I checked that the Astro build produces no
-inline scripts.
+**8. What is the real security boundary of the terminal?**
+- The container, not command filtering. Users get root *inside* an
+  unprivileged container (user namespaces), with `security.privileged` and
+  `security.nesting` forced false, AppArmor and seccomp from LXD, no devices,
+  and process, memory and CPU limits.
+- The text is one argv element to `/bin/sh -c` inside the container, wrapped
+  in `timeout -s KILL 30`. Nothing reaches a host shell.
+- Residual risks: a kernel or LXD breakout bug, and LAN access from the
+  bridge.
 
-**9. What is the biggest residual risk?**
-The `lxd` group is root-equivalent. Anyone who can talk to the socket can start
-a privileged container that mounts `/`. So an RCE in this app, or a stolen
-admin session, is effectively host compromise, even though the service runs as
-a non-root user with a heavy systemd sandbox (NoNewPrivileges,
-ProtectSystem=strict, no capabilities, syscall filter, MemoryMax, CPUQuota).
+**9. Your service runs as non-root. Is it unprivileged?**
+- No. It's in the `lxd` group, and LXD socket access is root on the host.
+- Mitigations:
+  - an API that exposes only fixed config keys (privileged and nesting forced
+    off, image allowlist);
+  - systemd sandboxing;
+  - a collector with no network;
+  - an audit log;
+  - admin is treated as root.
+- The proper fix is a restricted LXD TLS client confined to a project. It's
+  listed as follow-up #1.
 
-Mitigations:
-* Expose only a narrow LXD surface: two limit keys, forced
-  `security.privileged=false`/`nesting=false`, and allowlisted images.
-* Keep sessions short, HttpOnly, and revocable.
-* Audit everything.
-* Recommend TLS plus VPN or an IP allowlist in front.
+**10. How are container renames and deletes handled?**
+- Rows are keyed by LXD `volatile.uuid`. The collector reconciles every tick.
+- **Rename:** the name is updated (in two steps, so a swap can't violate
+  `UNIQUE`), and grants and history follow the uuid.
+- **Out-of-band delete:** the row is removed, grants cascade, and it's
+  audited.
+- **Same name reused:** new uuid, so no inherited access.
+- Fresh rows (< 30 s old) are protected from a racing tick.
+- Tests: `test_rename_keeps_owner_and_grants` and
+  `test_outside_delete_drops_grants_and_same_name_is_not_inherited`.
 
-Container users get root *inside* an unprivileged container. That's intended,
-but worth stating.
+**11. What does the user see when LXD is down?**
+- The collector keeps ticking, records `lxd up=0`, and publishes last-known
+  values with `lxd_ok=false`.
+- The dashboard dims the cards and shows a red banner with the time LXD was
+  last seen.
+- Actions return 503 "LXD is unreachable". pylxd has 3 s connect and 30 s read
+  timeouts.
+- If the collector itself stops, the banner says the data is stale and for
+  how long.
 
-**10. What would you change for a bigger deployment?**
-* Move rate limits and the metrics fan-out to a shared store, or keep a single
-  "metrics leader", if it ever needed multiple workers.
-* Run container creation as a background job with progress over SSE instead of
-  a long-held request.
-* Use LXD's `/1.0/events` stream instead of polling for status changes.
-* Use per-project LXD restricted certificates so the app isn't root-equivalent.
-* Use zfs or btrfs pools for real disk accounting.
-* Add OIDC group or domain restrictions, plus WebAuthn step-up for destructive
-  admin actions.
+**12. Why Falcon, and what surprised you about it?**
+- It's the brief's preferred stack, it's lean, and its middleware gives one
+  choke point for authorization.
+- Surprises:
+  - the test client runs the shutdown hook per request;
+  - `App` has `__slots__`;
+  - a WebSocket can't receive text *or* binary in one call, so I used a typed
+    binary protocol;
+  - errors raised before `accept` show the browser only 1006, so the
+    middleware accepts and then closes with a 44xx code.
+
+**13. What did you get wrong first?**
+- v1 followed a paraphrase of the brief: it polled only while viewers were
+  connected, with no TSDB or quotas.
+- `TimestampSigner` plus WSL clock steps produced random logouts.
+- A rollup average was biased by the first missing sample.
+- systemd `EnvironmentFile` precedence and inline comments.
+- Each is in REPORT "Issues", with the fix.
+
+**14. How did you use AI, and how do you know the code is right?**
+- Claude Code wrote most of the code from my direction.
+- Correctness comes from:
+  - 116 tests, including adversarial authN/authZ, forged-token and quota-race
+    tests;
+  - live tests against real LXD;
+  - headless-browser checks;
+  - reading every module.
+- Bugs it introduced and that were caught are listed in REPORT "AI Tool
+  Usage".
