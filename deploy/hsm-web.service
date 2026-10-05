@@ -1,37 +1,37 @@
-# /etc/systemd/system/hobby-server-monitor.service
+# /etc/systemd/system/hsm-web.service: web API + static dashboard.
 #
 # Runs as the unprivileged `hsm` user. NOTE: membership in the `lxd` group
-# (needed to talk to the LXD socket) is effectively root on this host:
-# anyone in it can create a privileged container that mounts `/`. The
-# hardening below limits what *this process* can do directly, but a full
-# compromise of the app still means control of LXD. See README "Threat notes".
+# (needed for the LXD socket) is effectively root on this host: anyone in it
+# can create a privileged container that mounts `/`. The sandbox below limits
+# what this *process* can do directly; a full compromise of the app still
+# means control of LXD. See README "Security notes".
 [Unit]
-Description=Hobby Server Monitor (LXD dashboard)
+Description=Hobby Server Monitor web API
 Documentation=file:///opt/hobby-server-monitor/README.md
-After=network-online.target snap.lxd.daemon.service
-Wants=network-online.target
+After=network-online.target snap.lxd.daemon.service hsm-collector.service
+Wants=network-online.target hsm-collector.service
 
 [Service]
 Type=exec
 User=hsm
 Group=hsm
 SupplementaryGroups=lxd
-WorkingDirectory=/opt/hobby-server-monitor
+WorkingDirectory=/opt/hobby-server-monitor/backend
 # Secrets live only in this root-owned 0640 file (root:hsm).
 EnvironmentFile=/etc/hobby-server-monitor/env
-Environment=DATABASE_PATH=/var/lib/hobby-server-monitor/monitor.db
+Environment=SQLITE_DB_PATH=/var/lib/hobby-server-monitor/app.db
+Environment=TINYFLUX_DB_PATH=/var/lib/hobby-server-monitor/metrics
+Environment=DASHBOARD_DIST=/opt/hobby-server-monitor/dashboard/dist
 Environment=PYTHONDONTWRITEBYTECODE=1
-# One process, one worker, bound to loopback (put a TLS reverse proxy in front).
-ExecStart=/opt/hobby-server-monitor/.venv/bin/uvicorn app.main:get_app --factory \
-    --app-dir backend --host 127.0.0.1 --port 8000 --workers 1 \
-    --no-server-header --no-access-log --timeout-graceful-shutdown 5
+# One process, one worker, loopback only (put a TLS reverse proxy in front).
+ExecStart=/opt/hobby-server-monitor/.venv/bin/python -m hsm.web
 Restart=on-failure
 RestartSec=3
 StateDirectory=hobby-server-monitor
 StateDirectoryMode=0700
 UMask=0077
 
-# --- resource limits (the monitor must never starve what it monitors) ---
+# --- resource limits: the monitor must never starve what it monitors ---
 MemoryHigh=128M
 MemoryMax=192M
 CPUQuota=25%
@@ -61,6 +61,7 @@ MemoryDenyWriteExecute=yes
 RemoveIPC=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
+# AF_INET/6: listen on 127.0.0.1 and reach Google for OAuth
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
 SystemCallFilter=@system-service

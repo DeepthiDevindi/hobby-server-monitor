@@ -1,0 +1,73 @@
+# /etc/systemd/system/hsm-collector.service: background metrics collector.
+#
+# Independent of the web API and of browsers: it polls LXD every 10 s from
+# boot, writes TinyFlux segments and keeps going when LXD is down. Same
+# unprivileged user and the same `lxd`-group caveat as hsm-web.service.
+[Unit]
+Description=Hobby Server Monitor metrics collector
+Documentation=file:///opt/hobby-server-monitor/README.md
+After=snap.lxd.daemon.service
+
+[Service]
+Type=exec
+User=hsm
+Group=hsm
+SupplementaryGroups=lxd
+WorkingDirectory=/opt/hobby-server-monitor/backend
+EnvironmentFile=/etc/hobby-server-monitor/env
+Environment=SQLITE_DB_PATH=/var/lib/hobby-server-monitor/app.db
+Environment=TINYFLUX_DB_PATH=/var/lib/hobby-server-monitor/metrics
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/hobby-server-monitor/.venv/bin/python -m hsm.collector
+# SIGTERM: the collector flushes its partial rollup windows before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+Restart=always
+RestartSec=5
+StateDirectory=hobby-server-monitor
+StateDirectoryMode=0700
+UMask=0077
+
+# --- resource limits (smaller than the web API: it does less) ---
+MemoryHigh=96M
+MemoryMax=128M
+CPUQuota=10%
+TasksMax=16
+LimitNOFILE=256
+# Lower priority than the containers it measures.
+Nice=10
+IOSchedulingClass=idle
+
+# --- sandboxing ---
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/snap/lxd/common/lxd/unix.socket
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+# Never needs the network: only the LXD unix socket.
+PrivateNetwork=yes
+IPAddressDeny=any
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target
