@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.py[cod]
@@ -12,3 +14,6 @@ frontend/dist/
 frontend/.astro/
 .agents/
 .codex/
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.astro/

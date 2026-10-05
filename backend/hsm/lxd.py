@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import warnings
 from typing import Any, Callable
 
 import pylxd
@@ -18,6 +19,8 @@ import requests
 from pylxd.exceptions import ClientConnectionFailed, LXDAPIException, NotFound
 
 log = logging.getLogger("hsm.lxd")
+logging.getLogger("ws4py").setLevel(logging.WARNING)  # pylxd exec logs every socket close at INFO
+warnings.filterwarnings("ignore", message="Attempted to set unknown attribute", module="pylxd")
 TIMEOUT = (3.05, 30)  # (connect, read) seconds: a hung LXD can't hang us forever
 
 
