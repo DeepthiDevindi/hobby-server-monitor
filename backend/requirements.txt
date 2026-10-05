@@ -1,0 +1,9 @@
+# Runtime dependencies (web API + collector), pinned.
+falcon==4.4.0        # web framework (ASGI mode: SSE + WebSockets)
+uvicorn==0.34.3      # ASGI server; plain (no [standard]) to keep RSS small
+pylxd==2.4.2         # LXD API client (pulls requests, ws4py, cryptography)
+tinyflux==1.2.0      # time-series storage for metrics history
+joserfc==1.7.5       # verifies Google ID tokens (JWS/JWT)
+httpx==0.28.1        # OAuth code exchange + Google JWKS fetch
+websockets==15.0.1   # uvicorn's WS server + client for LXD exec websockets
+pydantic==2.13.5     # request body validation

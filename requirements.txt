@@ -1,8 +1,0 @@
-# Runtime dependencies only (6 direct packages). Plain `uvicorn` without
-# [standard]: no uvloop/httptools/watchfiles, keeping RSS and attack surface small.
-fastapi==0.115.12
-uvicorn==0.34.3
-httpx==0.28.1          # LXD REST over the unix socket + authlib's OAuth calls
-authlib==1.8.0         # Google OpenID Connect (ID token verification)
-itsdangerous==2.2.0    # cookie signing (also used by Starlette's SessionMiddleware)
-websockets==15.0.1     # uvicorn WS server + client to LXD exec websockets

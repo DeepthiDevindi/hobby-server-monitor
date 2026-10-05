@@ -6,7 +6,7 @@ request (instances?recursion=2) for all containers, then:
 
   1. computes rates (CPU %, network B/s) from the previous sample,
   2. appends raw points to the current hourly TinyFlux segment,
-  3. folds samples into 5-minute rollups (flushed when the window closes),
+  3. folds samples into 5-min and 1-hour rollups (flushed when a window closes),
   4. reconciles the SQLite `containers` table (renames / out-of-band deletes),
   5. atomically publishes latest.json for the live dashboard,
   6. once a minute, deletes segments past retention.
@@ -27,7 +27,7 @@ from typing import Any
 from .config import Settings
 from .db import Database
 from .lxd import LXD, LXDError, parse_size
-from .tsdb import RAW, ROLLUP, ROLLUP_SECONDS, MetricWriter
+from .tsdb import RAW, ROLLUP_TIERS, TIERS, MetricWriter
 
 log = logging.getLogger("hsm.collector")
 
@@ -98,6 +98,7 @@ def describe(inst: dict[str, Any], now: float) -> dict[str, Any]:
 @dataclass
 class Rollup:
     samples: int = 0
+    cpu_n: int = 0  # samples that had a CPU rate (the first one after a start has none)
     cpu_sum: float = 0.0
     cpu_max: float = 0.0
     mem_sum: float = 0.0
@@ -107,14 +108,14 @@ class Rollup:
     tx_bytes: float = 0.0
     procs_max: float = 0.0
     running: int = 0
-    name: str = ""
 
     def add(self, s: dict[str, Any], dt: float) -> None:
         self.samples += 1
-        self.name = s["name"]
-        cpu = s.get("cpu_pct") or 0.0
-        self.cpu_sum += cpu
-        self.cpu_max = max(self.cpu_max, cpu)
+        cpu = s.get("cpu_pct")
+        if cpu is not None:
+            self.cpu_n += 1
+            self.cpu_sum += cpu
+            self.cpu_max = max(self.cpu_max, cpu)
         self.mem_sum += s["mem_used"]
         self.mem_max = max(self.mem_max, s["mem_used"])
         if s.get("disk_used") is not None:
@@ -126,10 +127,9 @@ class Rollup:
 
     def fields(self) -> dict[str, Any]:
         n = max(1, self.samples)
-        return {"cpu_avg": self.cpu_sum / n, "cpu_max": self.cpu_max, "mem_avg": self.mem_sum / n,
+        return {"cpu_avg": self.cpu_sum / max(1, self.cpu_n), "cpu_max": self.cpu_max, "mem_avg": self.mem_sum / n,
                 "mem_max": self.mem_max, "disk_used": self.disk_used, "rx_bytes": self.rx_bytes,
-                "tx_bytes": self.tx_bytes, "procs_max": self.procs_max, "up_frac": self.running / n,
-                "samples": self.samples}
+                "tx_bytes": self.tx_bytes, "procs_max": self.procs_max, "up_frac": self.running / n}
 
 
 @dataclass
@@ -139,8 +139,9 @@ class Collector:
     db: Database
     writer: MetricWriter
     prev: dict[str, tuple[float, int, int, int]] = field(default_factory=dict)
-    rollups: dict[str, Rollup] = field(default_factory=dict)
-    window: int = 0
+    # tier -> uuid -> accumulator, and tier -> start of the open window
+    rollups: dict[str, dict[str, Rollup]] = field(default_factory=lambda: {t: {} for t in ROLLUP_TIERS})
+    windows: dict[str, int] = field(default_factory=dict)
     last_snapshot: dict[str, Any] = field(default_factory=dict)
     last_ok: float | None = None
     lxd_ok: bool | None = None
@@ -203,27 +204,36 @@ class Collector:
     def _write(self, now: float, samples: list[dict[str, Any]], poll_ms: float) -> None:
         points = [("lxd", {"host": "local"}, {"up": 1, "poll_ms": poll_ms})]
         for s in samples:
-            points.append(("ct", {"uuid": s["uuid"], "name": s["name"]}, {
-                "cpu_pct": s["cpu_pct"], "mem_used": s["mem_used"], "mem_limit": s["mem_limit"],
-                "disk_used": s["disk_used"], "disk_limit": s["disk_limit"], "rx_bps": s["rx_bps"],
-                "tx_bps": s["tx_bps"], "rx_total": s["_rx"], "tx_total": s["_tx"],
-                "procs": s["procs"], "running": 1 if s["status"] == "Running" else 0}))
+            # Raw rows stay lean (TinyFlux repeats field names per row): limits and
+            # names are static and live in latest.json / the rollups instead.
+            points.append(("ct", {"uuid": s["uuid"]}, {
+                "cpu_pct": s["cpu_pct"], "mem_used": s["mem_used"], "disk_used": s["disk_used"],
+                "rx_bps": s["rx_bps"], "tx_bps": s["tx_bps"], "procs": s["procs"],
+                "running": 1 if s["status"] == "Running" else 0}))
         self.writer.write(RAW, now, points)
 
-        window = int(now // ROLLUP_SECONDS) * ROLLUP_SECONDS
-        if self.window and window != self.window:
-            self.flush_rollups()
-        self.window = window
-        for s in samples:
-            self.rollups.setdefault(s["uuid"], Rollup()).add(s, self.settings.poll_interval)
+        for tier in ROLLUP_TIERS:
+            step = TIERS[tier].step
+            window = int(now // step) * step
+            if self.windows.get(tier) not in (None, window):
+                self.flush(tier)
+            self.windows[tier] = window
+            acc = self.rollups[tier]
+            for s in samples:
+                acc.setdefault(s["uuid"], Rollup()).add(s, self.settings.poll_interval)
         self.prev = {k: v for k, v in self.prev.items() if k in {s["uuid"] for s in samples}}
 
+    def flush(self, tier: str) -> None:
+        """Write one point per container for the window that just closed."""
+        acc, window = self.rollups[tier], self.windows.get(tier)
+        if acc and window is not None:
+            self.writer.write(tier, window, [(TIERS[tier].measurement, {"uuid": u}, r.fields())
+                                             for u, r in acc.items()])
+        acc.clear()
+
     def flush_rollups(self) -> None:
-        if not self.rollups or not self.window:
-            return
-        self.writer.write(ROLLUP, self.window, [
-            ("ct5m", {"uuid": uuid, "name": r.name}, r.fields()) for uuid, r in self.rollups.items()])
-        self.rollups.clear()
+        for tier in ROLLUP_TIERS:
+            self.flush(tier)
 
     def _reconcile(self, now: float, samples: list[dict[str, Any]]) -> None:
         """Keep `containers` in step with LXD, keyed by instance uuid."""
@@ -267,7 +277,7 @@ def _int(value: Any) -> int | None:
 
 def run(settings: Settings) -> None:
     db = Database(settings.sqlite_path)
-    writer = MetricWriter(settings.tinyflux_dir, settings.raw_retention_hours, settings.retention_days)
+    writer = MetricWriter(settings.tinyflux_dir, settings.retention)
     collector = Collector(settings, LXD(settings.lxd_endpoint, settings.lxd_verify_cert), db, writer)
     stopping = False
 

@@ -21,7 +21,19 @@ def load_dotenv(path: Path) -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+        value = value.strip()
+        if value[:1] in "\"'" and value[:1] and value.count(value[0]) >= 2:
+            value = value[1:value.index(value[0], 1)]  # quoted: keep as-is
+        else:
+            value = value.split(" #", 1)[0].strip()  # unquoted: drop inline comment
+        os.environ.setdefault(key.strip(), value)
+
+
+def _path(value: str) -> str:
+    """Relative paths in .env are relative to the repository root, so it does
+    not matter which directory a process was started from."""
+    p = Path(value)
+    return str(p if p.is_absolute() else (REPO_ROOT / p).resolve())
 
 
 def _bool(value: str) -> bool:
@@ -53,7 +65,8 @@ class Settings:
     lxd_verify_cert: bool = True
     dashboard_dir: str = str(REPO_ROOT / "dashboard" / "dist")
     poll_interval: float = 10.0
-    raw_retention_hours: int = 24
+    raw_retention_hours: int = 6
+    rollup_retention_days: int = 7
     retention_days: int = 30
     session_hours: float = 8.0
     session_idle_minutes: int = 60
@@ -69,6 +82,12 @@ class Settings:
     def latest_path(self) -> str:
         """Where the collector publishes its newest snapshot for the web API."""
         return str(Path(self.tinyflux_dir) / "latest.json")
+
+    @property
+    def retention(self) -> dict[str, int]:
+        """Seconds kept per TSDB tier (raw / 5m / 1h)."""
+        from .tsdb import retention_seconds
+        return retention_seconds(self.raw_retention_hours, self.rollup_retention_days, self.retention_days)
 
     @property
     def lxd_socket(self) -> str | None:
@@ -94,13 +113,14 @@ class Settings:
             bootstrap_admin_email=env("BOOTSTRAP_ADMIN_EMAIL", "").strip().lower(),
             cookie_secure=_bool(env("COOKIE_SECURE", "true")),
             public_origin=origin.rstrip("/"),
-            sqlite_path=env("SQLITE_DB_PATH", cls.sqlite_path),
-            tinyflux_dir=env("TINYFLUX_DB_PATH", cls.tinyflux_dir),
+            sqlite_path=_path(env("SQLITE_DB_PATH", cls.sqlite_path)),
+            tinyflux_dir=_path(env("TINYFLUX_DB_PATH", cls.tinyflux_dir)),
             lxd_endpoint=env("LXD_ENDPOINT", cls.lxd_endpoint),
             lxd_verify_cert=_bool(env("LXD_VERIFY_CERT", "true")),
-            dashboard_dir=env("DASHBOARD_DIST", cls.dashboard_dir),
+            dashboard_dir=_path(env("DASHBOARD_DIST", cls.dashboard_dir)),
             poll_interval=max(2.0, float(env("COLLECTOR_POLL_INTERVAL_SECONDS", "10"))),
-            raw_retention_hours=int(env("RAW_RETENTION_HOURS", "24")),
+            raw_retention_hours=int(env("RAW_RETENTION_HOURS", "6")),
+            rollup_retention_days=int(env("ROLLUP_RETENTION_DAYS", "7")),
             retention_days=int(env("METRICS_RETENTION_DAYS", "30")),
             session_hours=float(env("SESSION_HOURS", "8")),
             session_idle_minutes=int(env("SESSION_IDLE_MINUTES", "60")),

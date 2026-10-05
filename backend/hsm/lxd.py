@@ -151,7 +151,11 @@ class LXD:
     @_wrap
     def update_limits(self, name: str, config: dict[str, str], disk_gib: float | None) -> None:
         inst = self.client().instances.get(name)
-        inst.config.update(config)
+        for key, value in config.items():
+            if value == "":
+                inst.config.pop(key, None)  # "" means: remove the limit
+            else:
+                inst.config[key] = value
         if disk_gib is not None:
             # The root disk usually comes from a profile; override it locally.
             root = dict(inst.expanded_devices.get("root") or {"path": "/", "type": "disk"})

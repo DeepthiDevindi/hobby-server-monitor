@@ -1,2 +1,0 @@
-"""Hobby Server Monitor backend."""
-
