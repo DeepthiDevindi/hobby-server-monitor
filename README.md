@@ -17,6 +17,57 @@ monitors, so it is built to stay small:
 | **Admin** | Create, update (limits, owner), start, stop, restart, freeze and delete containers. Invite and revoke users, set roles and quotas, grant container access. Open a terminal anywhere. View usage accounting and the audit log. |
 | **Container user** | See live metrics and history **only for containers they own or were granted**, see their own quota, and run commands or open a terminal in those containers. Asking for any other container returns `403`. |
 
+## Reviewer quick start
+
+You run your own copy with **your own Google OAuth client**. No credentials
+are in this repo, and your email becomes the admin.
+
+**Prerequisites:** Ubuntu 24.04 or WSL2, LXD initialised, Python 3.10+,
+Node 18.20+. [Setup](#setup) steps 1 and 2 cover these.
+
+1. **Google OAuth client** (about 5 minutes):
+   1. Go to <https://console.cloud.google.com/> and open
+      **APIs & Services → OAuth consent screen**.
+   2. Choose **External**, then add your Google account **and any second
+      account you'll test with** under **Test users**.
+   3. Go to **Credentials → Create credentials → OAuth client ID → Web
+      application**.
+   4. Under **Authorised redirect URIs**, add
+      `http://localhost:8000/auth/google/callback`. Leave
+      "Authorised JavaScript origins" empty, and delete the empty row if the
+      form shows one, otherwise it won't save.
+2. **Configure and run:**
+   ```bash
+   cp .env.example .env
+   # in .env set: GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET,
+   #              SESSION_SECRET  (python3 -c "import secrets; print(secrets.token_hex(32))"),
+   #              BOOTSTRAP_ADMIN_EMAIL = your Google address
+   python3 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
+   (cd backend && ../.venv/bin/python -m hsm.init_db)
+   (cd dashboard && npm ci && npm run build)
+   cd backend
+   ../.venv/bin/python -m hsm.collector &     # background collector
+   ../.venv/bin/python -m hsm.web             # http://localhost:8000
+   ```
+3. **As admin:**
+   1. Open <http://localhost:8000> and sign in with the `BOOTSTRAP_ADMIN_EMAIL`
+      account.
+   2. Create a container (**+ New container**).
+   3. Open it to see history charts and run a command. Live metrics update
+      every 10 s.
+4. **As a container user:**
+   1. On **Admin**, invite your second Google account, give it a quota, and
+      grant it one container.
+   2. Sign in with that account in a private window.
+   3. It sees only that container, with no Admin, Usage or lifecycle buttons.
+      Opening any other container returns 403.
+5. **Tests:** `cd backend && ../.venv/bin/python -m pytest -q` (116 tests;
+   the tests marked `live` use your LXD socket).
+
+If port 8000 is taken (e.g. by Docker Desktop on Windows), set
+`BACKEND_PORT=8001` and use port 8001 in the redirect URI in both `.env` and
+Google.
+
 Contents:
 - [Setup](#setup)
 - [Architecture](#architecture)
