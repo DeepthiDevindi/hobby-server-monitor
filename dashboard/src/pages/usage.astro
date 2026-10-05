@@ -1,0 +1,38 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Usage">
+  <div class="toolbar"><h1>Usage accounting</h1></div>
+
+  <section class="panel">
+    <h2>Host capacity vs. allocated <span class="muted small">sum of container limits</span></h2>
+    <div id="host" class="quota"><p class="muted">Loading…</p></div>
+    <p class="hint" id="unlimited"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Per user: allocated vs. quota</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>User</th><th>CPU cores</th><th>Memory</th><th>Disk</th></tr></thead>
+      <tbody id="per-user"></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Per container consumption
+      <span class="seg" id="periods" role="group" aria-label="period">
+        <button data-p="1h">1h</button><button data-p="24h">24h</button><button data-p="7d">7d</button><button data-p="30d">30d</button>
+      </span>
+    </h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Container</th><th>Owner</th><th class="right">Avg CPU</th><th class="right">Peak CPU</th>
+        <th class="right">CPU core-hours</th><th class="right">Peak memory</th><th class="right">Received</th>
+        <th class="right">Sent</th><th class="right">Up</th></tr></thead>
+      <tbody id="per-container"></tbody>
+    </table></div>
+    <p class="hint" id="tsdb"></p>
+  </section>
+</Layout>
+<script>
+  import '../scripts/usage.ts';
+</script>

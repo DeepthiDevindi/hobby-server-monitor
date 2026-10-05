@@ -1,0 +1,56 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Container">
+  <div class="toolbar">
+    <div>
+      <h1 id="c-name">Container</h1>
+      <span id="c-sub" class="muted small">loading…</span>
+    </div>
+    <div class="inline" id="c-actions"></div>
+  </div>
+
+  <section class="panel" id="c-facts-panel">
+    <dl class="facts" id="c-facts"></dl>
+  </section>
+
+  <section class="panel">
+    <h2>History
+      <span class="seg" id="ranges" role="group" aria-label="time range">
+        <button data-r="15m">15m</button><button data-r="1h">1h</button><button data-r="6h">6h</button>
+        <button data-r="24h">24h</button><button data-r="7d">7d</button><button data-r="30d">30d</button>
+      </span>
+    </h2>
+    <p class="hint" id="h-meta"></p>
+    <div class="charts" id="charts"><p class="muted">Loading history…</p></div>
+  </section>
+
+  <section class="panel">
+    <h2>Run a command <a class="btn" id="term-link" href="#">Open interactive terminal ›_</a></h2>
+    <form id="exec-form" class="cmd">
+      <input name="command" required maxlength="4096" placeholder="e.g. df -h /   (runs as root inside the container, 30 s limit)" autocomplete="off" />
+      <button class="primary" type="submit">Run</button>
+    </form>
+    <p class="hint" id="exec-meta"></p>
+    <pre class="output" id="exec-out" hidden></pre>
+  </section>
+
+  <section class="panel" id="admin-panel" hidden>
+    <h2>Limits &amp; owner <span class="muted small">admin</span></h2>
+    <form id="limits-form" class="grid2">
+      <label>CPU cores <input name="cpus" type="number" min="1" required /></label>
+      <label>CPU allowance % <input name="cpu_allowance" type="number" min="5" max="100" step="5" /></label>
+      <label>Memory (MiB) <input name="memory_mib" type="number" min="128" step="64" required /></label>
+      <label>Disk (GiB) <input name="disk_gib" type="number" min="1" /></label>
+      <div><button class="primary" type="submit">Save limits</button> <span class="error" id="limits-err"></span></div>
+    </form>
+    <form id="owner-form" class="inline mt">
+      <label>Owner <select name="owner_id" id="owner-sel"></select></label>
+      <button type="submit">Change owner</button> <span class="error" id="owner-err"></span>
+    </form>
+    <p class="hint">Raising limits is checked against host capacity and the owner's quota. Lowering is always allowed.</p>
+  </section>
+</Layout>
+<script>
+  import '../scripts/container.ts';
+</script>

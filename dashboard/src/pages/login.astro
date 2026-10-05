@@ -9,7 +9,7 @@ import Layout from '../layouts/Layout.astro';
       <p id="login-error" class="error" hidden></p>
       <a class="btn primary" href="/auth/login">Sign in with Google</a>
       <p class="muted small mt">
-        New accounts have no access until an administrator assigns containers.
+        Access is by invitation only. An administrator must invite your Google email first.
       </p>
     </div>
   </div>
@@ -17,6 +17,7 @@ import Layout from '../layouts/Layout.astro';
 <script>
   const messages: Record<string, string> = {
     unverified: 'Your Google email address is not verified.',
+    not_invited: 'This Google account has not been invited. Ask an administrator to invite your email address.',
     oauth: 'Google sign-in failed or expired. Please try again.',
   };
   const code = new URLSearchParams(location.search).get('error');

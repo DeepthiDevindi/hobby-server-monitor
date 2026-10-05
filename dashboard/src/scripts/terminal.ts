@@ -8,8 +8,9 @@ const REASONS: Record<number, string> = {
   1000: 'Session ended.',
   1006: 'Connection lost.',
   1008: 'Connection refused (origin check).',
-  4401: 'Your session expired. Please sign in again.',
-  4403: 'You do not have access to this container.',
+  3403: 'Connection refused (origin check).',
+  4401: 'Your session ended. Please sign in again.',
+  4403: 'You do not have access to this container (or it was revoked).',
   4408: 'Closed after inactivity.',
   4409: 'Container is not running.',
   4429: 'Too many terminals open or too many attempts. Wait a moment.',
@@ -34,9 +35,9 @@ function connect(): void {
   again.hidden = true;
   status.textContent = 'connecting…';
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/api/containers/${name}/terminal?cols=${term.cols}&rows=${term.rows}`);
+  ws = new WebSocket(`${proto}://${location.host}/api/containers/${name}/terminal`);
   ws.binaryType = 'arraybuffer';
-  ws.onopen = () => { status.textContent = 'connected'; term.focus(); };
+  ws.onopen = () => { status.textContent = 'connected'; sendSize(); term.focus(); };
   ws.onmessage = (ev) => term.write(new Uint8Array(ev.data as ArrayBuffer));
   ws.onclose = (ev) => {
     const msg = REASONS[ev.code] ?? `Disconnected (${ev.code}).`;
@@ -47,10 +48,18 @@ function connect(): void {
   };
 }
 
-// Keystrokes go as binary frames; text frames are reserved for control JSON.
-term.onData((d) => ws?.readyState === WebSocket.OPEN && ws.send(enc.encode(d)));
-term.onBinary((d) => ws?.readyState === WebSocket.OPEN && ws.send(Uint8Array.from(d, (c) => c.charCodeAt(0))));
-term.onResize(({ cols, rows }) => ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'resize', cols, rows })));
+// Every frame is binary with a 1-byte type: 0x00 = keystrokes, 0x01 = resize JSON.
+function frame(type: number, payload: Uint8Array): void {
+  if (ws?.readyState !== WebSocket.OPEN) return;
+  const buf = new Uint8Array(payload.length + 1);
+  buf[0] = type;
+  buf.set(payload, 1);
+  ws.send(buf);
+}
+term.onData((d) => frame(0, enc.encode(d)));
+term.onBinary((d) => frame(0, Uint8Array.from(d, (c) => c.charCodeAt(0))));
+const sendSize = () => frame(1, enc.encode(JSON.stringify({ cols: term.cols, rows: term.rows })));
+term.onResize(sendSize);
 addEventListener('resize', () => fit.fit());
 again.onclick = connect;
 

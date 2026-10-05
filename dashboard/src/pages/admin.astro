@@ -5,30 +5,30 @@ import Layout from '../layouts/Layout.astro';
   <div class="toolbar"><h1>Administration</h1></div>
 
   <section class="panel">
-    <div class="toolbar">
-      <h2>Users &amp; container access</h2>
-      <form id="add-user" class="inline">
-        <input name="email" type="email" placeholder="email@example.com" required />
-        <select name="role"><option value="user">user</option><option value="admin">admin</option></select>
-        <button class="primary" type="submit">Add user</button>
-      </form>
-    </div>
-    <p class="muted small">
-      New Google sign-ins appear here with no access. Assign containers to grant metrics + terminal access.
-    </p>
+    <h2>Invite a user</h2>
+    <form id="invite" class="grid2">
+      <label>Google account email <input name="email" type="email" placeholder="name@gmail.com" required /></label>
+      <label>Role <select name="role"><option value="user">Container user</option><option value="admin">Admin</option></select></label>
+      <label>Quota: CPU cores <input name="cpus" type="number" min="0" placeholder="unlimited" /></label>
+      <label>Quota: memory (MiB) <input name="memory_mib" type="number" min="0" step="128" placeholder="unlimited" /></label>
+      <label>Quota: disk (GiB) <input name="disk_gib" type="number" min="0" placeholder="unlimited" /></label>
+      <div><button class="primary" type="submit">Invite</button></div>
+    </form>
+    <p class="hint">Only invited emails can sign in. A new user sees nothing until you grant containers (or make them the owner of one).</p>
+  </section>
+
+  <section class="panel">
+    <h2>Users &amp; access</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>User</th><th>Role</th><th>Containers</th><th>Assign</th><th></th></tr></thead>
-        <tbody id="users"></tbody>
+        <thead><tr><th>User</th><th>Role</th><th>Quota (allocated / limit)</th><th>Containers</th><th>Grant</th><th></th></tr></thead>
+        <tbody id="users"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
       </table>
     </div>
   </section>
 
   <section class="panel">
-    <div class="toolbar">
-      <h2>Audit log</h2>
-      <button id="audit-refresh">Refresh</button>
-    </div>
+    <h2>Audit log <button id="audit-refresh">Refresh</button></h2>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>

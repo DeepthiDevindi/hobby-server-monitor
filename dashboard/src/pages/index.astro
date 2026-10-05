@@ -5,26 +5,54 @@ import Layout from '../layouts/Layout.astro';
   <div class="toolbar">
     <div>
       <h1>Containers</h1>
-      <span id="live" class="muted small">connecting…</span>
+      <span id="live" class="muted small">loading…</span>
     </div>
     <button id="new" class="primary" hidden>+ New container</button>
   </div>
-  <div id="grid" class="grid"></div>
-  <div id="empty" class="panel empty muted" hidden>
-    No containers are assigned to you yet. Ask an administrator for access.
-  </div>
 
-  <dialog id="create-dlg">
+  <section id="my-quota" class="panel" hidden>
+    <h2>My resource quota <span class="muted small">allocated by containers you own</span></h2>
+    <div id="quota-bars" class="quota"></div>
+  </section>
+
+  <div id="loading" class="panel empty muted">Loading containers…</div>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="panel empty muted" hidden></div>
+
+  <dialog id="create-dlg" class="wide">
     <form id="create-form" method="dialog">
       <h2>New container</h2>
-      <label>Name
-        <input name="name" required maxlength="63" pattern="[a-z][a-z0-9\-]{0,61}[a-z0-9]|[a-z]"
-          placeholder="web-test" autocomplete="off" />
-      </label>
-      <label>Image <select name="image" id="image-select"></select></label>
-      <div class="row">
-        <label>CPUs <input name="cpus" type="number" min="1" value="1" required /></label>
-        <label>Memory (MiB) <input name="memory_mib" type="number" min="128" step="64" value="512" required /></label>
+      <p id="create-loading" class="muted small">Reading host capacity from LXD…</p>
+      <div id="create-fields" hidden>
+        <div class="grid2">
+          <label>Name
+            <input name="name" required maxlength="63" pattern="[a-z]([a-z0-9\-]{0,61}[a-z0-9])?" placeholder="web-test" autocomplete="off" />
+            <span class="hint">lowercase letters, digits, '-'; starts with a letter</span>
+          </label>
+          <label>Owner (quota is charged here)
+            <select name="owner_id" id="owner-select"></select>
+            <span class="hint" id="owner-hint"></span>
+          </label>
+        </div>
+        <div class="grid2">
+          <label>Image <select name="image" id="image-select"></select></label>
+          <label>Storage pool <select name="pool" id="pool-select"></select></label>
+        </div>
+        <label>CPU cores <div class="slider"><input type="range" name="cpus" min="1" max="1024" value="1" /><output></output></div></label>
+        <label>CPU allowance (% of each core) <div class="slider"><input type="range" name="cpu_allowance" min="5" max="100" step="5" value="100" /><output></output></div></label>
+        <label>Memory (MiB) <div class="slider"><input type="range" name="memory_mib" min="128" max="1048576" step="64" value="512" /><output></output></div></label>
+        <label id="disk-field">Disk (GiB) <div class="slider"><input type="range" name="disk_gib" min="1" max="65536" value="4" /><output></output></div>
+          <span class="hint" id="disk-hint"></span></label>
+        <div class="grid2">
+          <label>Network <select name="network" id="network-select"></select></label>
+          <label>Profiles <select name="profiles" id="profile-select" multiple size="2"></select></label>
+        </div>
+        <label>Description <input name="description" maxlength="200" placeholder="optional" /></label>
+        <div class="grid2">
+          <label class="check"><input type="checkbox" name="autostart" /> Start on host boot</label>
+          <label class="check"><input type="checkbox" name="ephemeral" /> Ephemeral (deleted when stopped)</label>
+        </div>
+        <p class="hint">Limits are bounded by the host and by the owner's remaining quota; the server re-checks every value.</p>
       </div>
       <p class="error" id="create-err"></p>
       <div class="dialog-actions">
@@ -34,26 +62,10 @@ import Layout from '../layouts/Layout.astro';
     </form>
   </dialog>
 
-  <dialog id="limits-dlg">
-    <form id="limits-form" method="dialog">
-      <h2>Limits for <span id="limits-name"></span></h2>
-      <div class="row">
-        <label>CPUs <input name="cpus" type="number" min="1" required /></label>
-        <label>Memory (MiB) <input name="memory_mib" type="number" min="128" step="64" required /></label>
-      </div>
-      <p class="error" id="limits-err"></p>
-      <div class="dialog-actions">
-        <button type="button" data-close>Cancel</button>
-        <button class="primary" type="submit">Save</button>
-      </div>
-    </form>
-  </dialog>
-
   <dialog id="delete-dlg">
     <form id="delete-form" method="dialog">
       <h2>Delete container</h2>
-      <p>This permanently deletes <strong id="delete-name"></strong> and all its data.
-        Type the name to confirm.</p>
+      <p>This permanently deletes <strong id="delete-name"></strong> and all its data. Type the name to confirm.</p>
       <input name="confirm" autocomplete="off" required />
       <p class="error" id="delete-err"></p>
       <div class="dialog-actions">

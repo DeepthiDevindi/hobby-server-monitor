@@ -17,14 +17,16 @@ const { title, bare = false } = Astro.props;
         <a class="brand" href="/">▣ Hobby Server Monitor</a>
         <nav>
           <a href="/">Containers</a>
+          <a href="/usage/" id="nav-usage" hidden>Usage</a>
           <a href="/admin/" id="nav-admin" hidden>Admin</a>
         </nav>
         <div class="who">
-          <span id="who" class="muted"></span>
+          <span id="who" class="muted small"></span>
           <button id="logout" class="ghost" hidden>Sign out</button>
         </div>
       </header>
     )}
+    <div id="banner" class="banner" role="status" hidden></div>
     <main><slot /></main>
     <div id="toast" role="status" aria-live="polite" hidden></div>
   </body>
