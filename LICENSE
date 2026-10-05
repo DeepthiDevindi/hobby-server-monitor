@@ -1,0 +1,44 @@
+Copyright (c) 2026 RoboticGen. All rights reserved.
+
+This repository and its contents — including but not limited to the assignment
+brief, README, REPORT template, folder scaffold, and any other files supplied
+by RoboticGen in this template — are proprietary and are provided solely for
+the purpose of completing the "Software Engineer Intern — Hobby Server
+Monitor" technical assessment issued by RoboticGen.
+
+PERMITTED USE
+
+A candidate who has been invited to this assessment via GitHub Classroom is
+granted a limited, non-exclusive, non-transferable license to:
+
+  1. Accept this template and use it as the starting point for their
+     submission.
+  2. Write, commit, and submit original solution code in response to the
+     assignment brief.
+  3. Keep and reuse the solution code they personally authored (i.e. all
+     code added beyond the files originally supplied in this template) for
+     their own portfolio, after the assessment has concluded.
+
+NOT PERMITTED
+
+Unless RoboticGen grants written permission, no one may:
+
+  1. Publicly redistribute, publish, mirror, or share the assignment brief,
+     this README, the REPORT template, or any other file originally supplied
+     by RoboticGen in this repository.
+  2. Use the assignment brief, in whole or in part, for any purpose other
+     than completing this specific assessment (including reuse in other
+     interview processes, courses, or publications).
+  3. Use this repository or its contents for commercial purposes.
+
+ALL OTHER RIGHTS RESERVED. This is not an open-source license, and no rights
+are granted by implication, estoppel, or otherwise beyond what is stated
+above. If you are unsure whether a use is covered, contact
+dev@roboticgen.co before proceeding.
+
+THE SOFTWARE AND MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
+KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+EVENT SHALL ROBOTICGEN BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE MATERIALS OR THE USE OR OTHER
+DEALINGS IN THE MATERIALS.
