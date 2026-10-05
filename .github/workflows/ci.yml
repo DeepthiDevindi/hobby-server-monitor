@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install dependencies
+        run: pip install -r backend/requirements-dev.txt
+      - name: Initialise an empty database (init_db path)
+        working-directory: backend
+        env:
+          SESSION_SECRET: ci-only-not-a-secret-0123456789abcdef
+          BOOTSTRAP_ADMIN_EMAIL: ci@example.com
+          SQLITE_DB_PATH: /tmp/ci/app.db
+          TINYFLUX_DB_PATH: /tmp/ci/metrics
+        run: |
+          python -m hsm.init_db
+          python -m hsm.init_db --check
+      - name: Run tests (live LXD tests skip without a socket)
+        working-directory: backend
+        run: python -m pytest -q -rs
+
+  dashboard:
+    name: Dashboard build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install and build
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
+      - name: No inline scripts (CSP is script-src 'self')
+        working-directory: dashboard
+        run: "! grep -rl '<script>' dist"

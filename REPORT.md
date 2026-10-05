@@ -352,6 +352,9 @@ Technical lessons from this project:
 
 ## Bonus Features Implemented
 
+- **CI (GitHub Actions):** on every push it runs `init_db` on an empty
+  database, the test suite (the live LXD tests skip on CI runners), and the
+  dashboard build, plus a check that no inline scripts slipped in.
 - **116 pytest tests:**
   - route-table walks for 401 and 403;
   - real RS256 ID-token forgery, audience, nonce and expiry tests;

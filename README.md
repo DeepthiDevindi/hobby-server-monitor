@@ -1,5 +1,7 @@
 # Hobby Server Monitor
 
+[![CI](https://github.com/DeepthiDevindi/hobby-server-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/DeepthiDevindi/hobby-server-monitor/actions/workflows/ci.yml)
+
 An admin dashboard and control panel for **LXD containers on one old Linux
 machine** that is used as a test server. It runs *on* the machine it
 monitors, so it is built to stay small:
