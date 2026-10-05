@@ -1,0 +1,9 @@
+# Pin versions once you've chosen them. Suggested (not required) starting
+# points from the task brief's preferred stack:
+#
+# falcon
+# pylxd
+# tinyflux
+#
+# Add whatever else your implementation needs (OAuth client, WSGI/ASGI
+# server, etc.) and remove this comment block.
