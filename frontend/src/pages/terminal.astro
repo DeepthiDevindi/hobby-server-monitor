@@ -1,0 +1,16 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Terminal">
+  <div class="term-head">
+    <h1>Terminal · <span id="term-name"></span></h1>
+    <div class="inline">
+      <span id="term-status" class="muted small">connecting…</span>
+      <button id="reconnect" hidden>Reconnect</button>
+    </div>
+  </div>
+  <div id="terminal"></div>
+</Layout>
+<script>
+  import '../scripts/terminal.ts';
+</script>

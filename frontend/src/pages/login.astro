@@ -1,0 +1,28 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Sign in" bare>
+  <div class="login">
+    <div class="panel">
+      <h1>▣ Hobby Server Monitor</h1>
+      <p class="muted">Sign in with a verified Google account.</p>
+      <p id="login-error" class="error" hidden></p>
+      <a class="btn primary" href="/auth/login">Sign in with Google</a>
+      <p class="muted small mt">
+        New accounts have no access until an administrator assigns containers.
+      </p>
+    </div>
+  </div>
+</Layout>
+<script>
+  const messages: Record<string, string> = {
+    unverified: 'Your Google email address is not verified.',
+    oauth: 'Google sign-in failed or expired. Please try again.',
+  };
+  const code = new URLSearchParams(location.search).get('error');
+  const el = document.getElementById('login-error')!;
+  if (code) {
+    el.textContent = messages[code] ?? 'Sign-in failed.';
+    el.hidden = false;
+  }
+</script>

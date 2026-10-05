@@ -1,0 +1,43 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Admin">
+  <div class="toolbar"><h1>Administration</h1></div>
+
+  <section class="panel">
+    <div class="toolbar">
+      <h2>Users &amp; container access</h2>
+      <form id="add-user" class="inline">
+        <input name="email" type="email" placeholder="email@example.com" required />
+        <select name="role"><option value="user">user</option><option value="admin">admin</option></select>
+        <button class="primary" type="submit">Add user</button>
+      </form>
+    </div>
+    <p class="muted small">
+      New Google sign-ins appear here with no access. Assign containers to grant metrics + terminal access.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>User</th><th>Role</th><th>Containers</th><th>Assign</th><th></th></tr></thead>
+        <tbody id="users"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="toolbar">
+      <h2>Audit log</h2>
+      <button id="audit-refresh">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>
+        <tbody id="audit"></tbody>
+      </table>
+    </div>
+    <button id="audit-more" class="mt">Load older</button>
+  </section>
+</Layout>
+<script>
+  import '../scripts/admin.ts';
+</script>

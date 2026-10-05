@@ -1,0 +1,31 @@
+---
+import '../styles.css';
+interface Props { title: string; bare?: boolean }
+const { title, bare = false } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="same-origin" />
+    <title>{title} · Hobby Server Monitor</title>
+  </head>
+  <body>
+    {!bare && (
+      <header class="topbar">
+        <a class="brand" href="/">▣ Hobby Server Monitor</a>
+        <nav>
+          <a href="/">Containers</a>
+          <a href="/admin/" id="nav-admin" hidden>Admin</a>
+        </nav>
+        <div class="who">
+          <span id="who" class="muted"></span>
+          <button id="logout" class="ghost" hidden>Sign out</button>
+        </div>
+      </header>
+    )}
+    <main><slot /></main>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

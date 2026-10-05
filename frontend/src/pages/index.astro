@@ -1,0 +1,68 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Containers">
+  <div class="toolbar">
+    <div>
+      <h1>Containers</h1>
+      <span id="live" class="muted small">connecting…</span>
+    </div>
+    <button id="new" class="primary" hidden>+ New container</button>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="panel empty muted" hidden>
+    No containers are assigned to you yet. Ask an administrator for access.
+  </div>
+
+  <dialog id="create-dlg">
+    <form id="create-form" method="dialog">
+      <h2>New container</h2>
+      <label>Name
+        <input name="name" required maxlength="63" pattern="[a-z][a-z0-9\-]{0,61}[a-z0-9]|[a-z]"
+          placeholder="web-test" autocomplete="off" />
+      </label>
+      <label>Image <select name="image" id="image-select"></select></label>
+      <div class="row">
+        <label>CPUs <input name="cpus" type="number" min="1" value="1" required /></label>
+        <label>Memory (MiB) <input name="memory_mib" type="number" min="128" step="64" value="512" required /></label>
+      </div>
+      <p class="error" id="create-err"></p>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="limits-dlg">
+    <form id="limits-form" method="dialog">
+      <h2>Limits for <span id="limits-name"></span></h2>
+      <div class="row">
+        <label>CPUs <input name="cpus" type="number" min="1" required /></label>
+        <label>Memory (MiB) <input name="memory_mib" type="number" min="128" step="64" required /></label>
+      </div>
+      <p class="error" id="limits-err"></p>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button class="primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-dlg">
+    <form id="delete-form" method="dialog">
+      <h2>Delete container</h2>
+      <p>This permanently deletes <strong id="delete-name"></strong> and all its data.
+        Type the name to confirm.</p>
+      <input name="confirm" autocomplete="off" required />
+      <p class="error" id="delete-err"></p>
+      <div class="dialog-actions">
+        <button type="button" data-close>Cancel</button>
+        <button class="danger solid" type="submit">Delete</button>
+      </div>
+    </form>
+  </dialog>
+</Layout>
+<script>
+  import '../scripts/dashboard.ts';
+</script>
