@@ -1,0 +1,70 @@
+# /etc/systemd/system/hobby-server-monitor.service
+#
+# Runs as the unprivileged `hsm` user. NOTE: membership in the `lxd` group
+# (needed to talk to the LXD socket) is effectively root on this host:
+# anyone in it can create a privileged container that mounts `/`. The
+# hardening below limits what *this process* can do directly, but a full
+# compromise of the app still means control of LXD. See README "Threat notes".
+[Unit]
+Description=Hobby Server Monitor (LXD dashboard)
+Documentation=file:///opt/hobby-server-monitor/README.md
+After=network-online.target snap.lxd.daemon.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=hsm
+Group=hsm
+SupplementaryGroups=lxd
+WorkingDirectory=/opt/hobby-server-monitor
+# Secrets live only in this root-owned 0640 file (root:hsm).
+EnvironmentFile=/etc/hobby-server-monitor/env
+Environment=DATABASE_PATH=/var/lib/hobby-server-monitor/monitor.db
+Environment=PYTHONDONTWRITEBYTECODE=1
+# One process, one worker, bound to loopback (put a TLS reverse proxy in front).
+ExecStart=/opt/hobby-server-monitor/.venv/bin/uvicorn app.main:get_app --factory \
+    --app-dir backend --host 127.0.0.1 --port 8000 --workers 1 \
+    --no-server-header --no-access-log --timeout-graceful-shutdown 5
+Restart=on-failure
+RestartSec=3
+StateDirectory=hobby-server-monitor
+StateDirectoryMode=0700
+UMask=0077
+
+# --- resource limits (the monitor must never starve what it monitors) ---
+MemoryHigh=128M
+MemoryMax=192M
+CPUQuota=25%
+TasksMax=64
+LimitNOFILE=1024
+
+# --- sandboxing ---
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/snap/lxd/common/lxd/unix.socket
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target
