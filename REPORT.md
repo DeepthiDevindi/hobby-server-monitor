@@ -2,9 +2,11 @@
 
 ## Time Spent
 
-Rough breakdown, not a timesheet. These are the wall-clock lengths of the
-AI-assisted working sessions on 2026-10-05 (see [AI Tool Usage](#ai-tool-usage));
-time spent reading and reviewing the code afterwards is not included.
+Rough breakdown, not a timesheet. The first table covers the AI-assisted
+working sessions on 2026-10-05 (see [AI Tool Usage](#ai-tool-usage)). The
+second covers my own time outside them.
+
+**AI-assisted sessions** (I directed the work; the agent wrote most of the code):
 
 | Area | Time |
 | --- | --- |
@@ -12,9 +14,19 @@ time spent reading and reviewing the code afterwards is not included.
 | Dashboard (Astro frontend) | ~1 h |
 | LXD integration (pylxd, exec/terminal, storage pools) | ~0.5 h |
 | Background collector / TSDB (incl. TinyFlux benchmarks) | ~1 h |
-| Debugging (clock skew, Falcon/TinyFlux quirks, WSL/Windows ports, OAuth setup) | ~1.5 h |
+| Debugging (clock skew, Falcon/TinyFlux quirks, WSL/Windows ports) | ~1.5 h |
 | Documentation / report / measurements | ~1 h |
-| **Total** | **~7 h** |
+| **Subtotal** | **~7 h** |
+
+**My own time:** about one working day, spent on:
+- the Google Cloud project and OAuth client, consent screen and test users;
+- getting WSL, LXD and the ports working, since Docker Desktop held port 8000
+  on Windows;
+- testing the dashboard in my own browser (sign-in, containers, terminal);
+- reading and reviewing the code and documents so I can explain them;
+- preparing for the review.
+
+**Total: roughly 15 hours.**
 
 ## Key Decisions
 
@@ -297,16 +309,42 @@ windows on SIGTERM.
 
 ## What You Learned
 
-- Measure before optimising storage. TinyFlux's per-row field names, and the
-  cost of parsing a whole file per query, were invisible until benchmarked.
-- Wall-clock time isn't monotonic, even on a laptop. Anything security-related
-  that compares timestamps needs tolerance, or should use server state.
-- Default-deny authorization is cheap when the framework has one choke point
-  (middleware) and the route table can be introspected in tests.
-- On LXD, "unprivileged service user" is meaningless while that user is in
-  the `lxd` group. The real fix is LXD's restricted TLS clients and projects.
-- systemd sandboxing details matter: environment precedence, comment parsing,
-  and `PrivateNetwork` still allows unix sockets.
+**Google OAuth was the hardest part for me.** I had to:
+- create the OAuth client and consent screen;
+- add myself as a test user;
+- match the redirect URI exactly, including the port;
+- work out that an empty "Authorised JavaScript origins" row blocks saving
+  the form (this app doesn't need one, because the token exchange happens on
+  the server).
+
+The app first ran on the wrong port: Docker Desktop already held port 8000 on
+Windows, so I moved to 8001 and had to update the redirect URI in both Google
+and `.env`. I also learned to keep real secrets only in `.env`. I once put
+them in `.env.example`, which is committed, and caught it before the first
+commit.
+
+**I learned to check the real requirements before optimising.** My first
+version polled LXD only while a browser was open, to save resources. The
+actual brief requires a collector that runs whether or not anyone is
+watching. Reading the brief properly turned a "good" optimisation into a
+missed requirement, and the rework taught me to separate *collecting* (always
+on, cheap, one call per tick) from *showing* (only while someone watches).
+
+Technical lessons from this project:
+- **Measure before optimising storage.** TinyFlux repeats field names on every
+  row and parses whole files to answer a query. That only became visible when
+  we benchmarked it (0.34 s and 60 MB for one big file), which led to time
+  segments and downsampling tiers.
+- **Wall-clock time can jump backwards**, even on a laptop (WSL did it twice in
+  30 s). A session check that compares timestamps broke because of that, so
+  expiry now lives in the database.
+- **Authorization is safest in one place:** a middleware that denies by
+  default, plus tests that walk every route, so a new endpoint can't forget it.
+- **On LXD, a "non-root" service in the `lxd` group is still effectively
+  root.** The container boundary (unprivileged containers, no nesting) is what
+  protects the host when someone uses the terminal.
+- **systemd details matter.** `EnvironmentFile` overrides `Environment=` and
+  doesn't allow inline comments; either one would have broken the service.
 
 ## Bonus Features Implemented
 
