@@ -309,19 +309,26 @@ windows on SIGTERM.
 
 ## What You Learned
 
-**Google OAuth was the hardest part for me.** I had to:
-- create the OAuth client and consent screen;
-- add myself as a test user;
-- match the redirect URI exactly, including the port;
-- work out that an empty "Authorised JavaScript origins" row blocks saving
-  the form (this app doesn't need one, because the token exchange happens on
-  the server).
-
-The app first ran on the wrong port: Docker Desktop already held port 8000 on
-Windows, so I moved to 8001 and had to update the redirect URI in both Google
-and `.env`. I also learned to keep real secrets only in `.env`. I once put
-them in `.env.example`, which is committed, and caught it before the first
-commit.
+**Learning LXD was the hardest part for me.** I had to understand:
+- **What a system container is.** It isn't a VM or a Docker app container: it
+  is a full Ubuntu userspace sharing the host kernel.
+- **Where commands run.** When I typed `lxc list` inside the browser terminal,
+  it tried to install LXD *inside* `test1`. That's when it clicked that the
+  terminal runs inside the container, not on the host.
+- **Storage pools differ.** The default `dir` pool can't enforce or even report
+  per-container disk usage. Disk limits only became real after adding a
+  `btrfs` pool.
+- **How limits are expressed:** `limits.cpu`, `limits.memory`, a hard CPU cap
+  such as `limits.cpu.allowance=50ms/100ms`, `limits.processes`. They can be
+  changed on a running container.
+- **Identity:** containers have a stable `volatile.uuid`, which is what keeps
+  access and history correct when someone renames a container with
+  `lxc rename`.
+- **The security model.** Being in the `lxd` group is effectively root on the
+  host, so a "non-root" service user in that group is not really
+  unprivileged. What protects the host when someone uses the terminal is the
+  container boundary: unprivileged containers with user namespaces, nesting
+  and privileged mode turned off, and resource limits.
 
 **I learned to check the real requirements before optimising.** My first
 version polled LXD only while a browser was open, to save resources. The
@@ -340,9 +347,6 @@ Technical lessons from this project:
   expiry now lives in the database.
 - **Authorization is safest in one place:** a middleware that denies by
   default, plus tests that walk every route, so a new endpoint can't forget it.
-- **On LXD, a "non-root" service in the `lxd` group is still effectively
-  root.** The container boundary (unprivileged containers, no nesting) is what
-  protects the host when someone uses the terminal.
 - **systemd details matter.** `EnvironmentFile` overrides `Environment=` and
   doesn't allow inline comments; either one would have broken the service.
 
